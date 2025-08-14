@@ -14,17 +14,21 @@ app.get("/",(req,res)=> res.redirect("/"));
 const handleListen = () => console.log("Listening on http://localhost:3000");
 const  server = http.createServer(app);
 const wss = new WebSocket.Server({server}); 
+const sockets = [];
+
+wss.on("connection",(socket)=>{ 
+    sockets.push(socket);
+    console.log("connecteto Broswer");
+    socket.send("hello");
+    socket.on("close",()=> console.log("Disconnected from Brower"));
+    socket.on("message", (message) => { 
+        sockets.forEach(aSocket => aSocket.send(`${message}`));
+     });
+})
+
 
 function handleConnection(socket){
     console.log(socket)
 }
-wss.on("connection",(socket)=>{ 
-    console.log("connecteto Broswer");
-    socket.send("hello");
-    socket.on("close",()=> console.log("Disconnected from Brower"));
-    socket.on("message",(message) => {console.log(`${message}`)});
-})
 
-
-
-server.listen(3000, handleListen); 
+server.listen(3000, handleListen);  

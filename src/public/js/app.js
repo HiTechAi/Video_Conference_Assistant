@@ -1,27 +1,31 @@
 // const sc1 = new WebSocket("http://localhost:3000");
 const socket = new WebSocket(`ws://${window.location.host}`);
+const messageList = document.querySelector("ul");
+const messageForm = document.querySelector("form");
 
-// 연결이 열렸을 때
 socket.addEventListener("open", () => {
     console.log("Connected to Server");
-
-    // 연결이 확인된 후 5초 뒤 메시지 전송
-    setTimeout(() => {
-        socket.send("hello brooooooo");
-    }, 5000);
 });
 
-// 서버로부터 메시지를 받았을 때
-socket.addEventListener("message", (event) => {
-    console.log("Just got this:\n", event.data, "\nfrom the server");
+socket.addEventListener("message", (message) => {
+    const li = document.createElement("li");
+    li.innerText = message.data;
+    messageList.append(li);
 });
 
-// 연결이 닫혔을 때
 socket.addEventListener("close", () => {
     console.log("Disconnected from Server");
 });
 
-// 에러 발생 시
 socket.addEventListener("error", (err) => {
     console.error("WebSocket error:", err);
 });
+ 
+function handleSubmit(event) {
+    event.preventDefault();
+    const input = messageForm.querySelector("input");
+    socket.send(input.value); 
+    input.value ="";
+}
+
+messageForm.addEventListener("submit",handleSubmit);

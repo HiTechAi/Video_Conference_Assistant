@@ -1,67 +1,81 @@
 const socket = io();
+const myFace = document.getElementById("myFace");
+const muteBtn =document.getElementById("mute");
+const cameraBtn = document.getElementById("camera");
+const cameraSelect = document.getElementById("cameras");
 
-const welcome = document.getElementById("welcome");
-const form = welcome.querySelector("form");
-const room = document.getElementById("room");
+let myStream;
+let muted = false;
+let cameraoff=false;
 
-room.hidden = true;
-let roomName;
-
-function addMessage(message){
-    const ul = room.querySelector("ul");
-    const li = document.createElement("li");
-    li.innerText = message;
-    ul.appendChild(li);
+async function getCameras() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter((devices) => devices.kind ==="videoinput");
+        const currentCamera = myStream.getVideoTracks()[0];
+        cameras.forEach((camera) =>{
+            const option = document.createElement("option");
+            option.value = camera.deviceId;
+            option.innerText = camera.label;
+            if(currentCamera.label == camera.label){
+                option.selected = true;
+            }
+            cameraSelect.appendChild(option);
+        });
+    } catch (error) {
+        console.log(error);
+    }
 }
 
-function showRoom(){
-    welcome.hidden = true;
-    room.hidden = false;
-    const h3 = room.querySelector("h3");
-    h3.innerText=`Room ${roomName}`;
-    const msgform = room.querySelector("#msg");
-    const nameform = room.querySelector("#name");
-    msgform.addEventListener("submit",handleMessageSubmit);
-    nameform.addEventListener("submit",handleNicknameSubmit);
+async function getMedia(deviceId) {
+    const initialConstraints ={
+        audio: true,
+        video: {facingMode:"user"},
+    };
+    const cameraConstraints={
+        audio: true,
+        video: {deviceId:{exact:deviceId}}
+    };
+    try {
+        myStream = await navigator.mediaDevices.getUserMedia(
+            deviceId ? cameraConstraints: initialConstraints
+        );
+       myFace.srcObject = myStream;
+       if(!deviceId){
+       await getCameras();}
+    } catch (error) {
+        console.log(error);
+    }
 }
 
-function handleRoomSubmit(event){
-    event.preventDefault();
-    const input = form.querySelector("input");
-    socket.emit("enter_room",input.value,showRoom);
-    roomName = input.value;
-    input.value = "";
+getMedia();
+
+function handleMuteClick(){
+    myStream.getAudioTracks().forEach((track) =>(track.enabled=!track.enabled));
+    if(!muted){
+        muteBtn.innerText = "Un Mute";
+        muted = true;
+    }else{
+        muteBtn.innerText = "Mute";
+        muted = false;
+    }
 }
 
-function handleMessageSubmit(event){
-    event.preventDefault();
-    const input = room.querySelector("#msg input");
-    const value = input.value;
-    socket.emit("new_message",value,roomName,()=>{
-        addMessage(`you: ${value}`);
-    });
-    input.value = "";
+function handleCameraClick(){
+    myStream.getVideoTracks().forEach((track) =>(track.enabled=!track.enabled));
+    if(!cameraoff){
+        cameraBtn.innerText = "Turn Camera On";
+        cameraoff = true;
+    }else{
+        cameraBtn.innerText = "Turn Camera Off";
+        cameraoff = false;
+    }
 }
 
-function handleNicknameSubmit(event){
-    event.preventDefault();
-    const input = room.querySelector("#name input");
-    const value = input.value;
-    socket.emit("nickname",value);
-    input.value = "";
+async function handleCameraChange(){
+    await getMedia(cameraSelect.vlaue);
 }
 
-form.addEventListener("submit",handleRoomSubmit);
-
-socket.on("welcome",(userNicname) =>{
-    addMessage(`${userNicname}, arrived`);
-})
-socket.on("bye",(userNicname)=>{
-    addMessage(`${userNicname}, left`);
-})
-socket.on("new_message",(msg)=>{
-    addMessage(msg);
-})
-socket.on("room_change",(rooms)=>{
-    addMessage(rooms);
-})
+muteBtn.addEventListener("click", handleMuteClick);
+cameraBtn.addEventListener("click",handleCameraClick);
+cameraSelect.addEventListener("input",handleCameraChange);

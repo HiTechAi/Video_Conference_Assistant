@@ -16,9 +16,19 @@ const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
 
 wsServer.on("connection",(socket)=>{
+    socket.on("join_room",(roomName, nickname)=>{
+        socket.join(roomName);
+        socket["nickname"] = nickname;
 
-    socket.on("join_room",(roomName)=>{
-        socket.join(roomName);    
+        const clientsInRoom = wsServer.sockets.adapter.rooms.get(roomName);
+        if (clientsInRoom.size === 2) {
+            const otherSocketId = Array.from(clientsInRoom).find(id => id !== socket.id);
+            const otherSocket = wsServer.sockets.sockets.get(otherSocketId);
+            if (otherSocket) {
+                socket.to(roomName).emit("opponent_nickname", nickname);
+                socket.emit("opponent_nickname", otherSocket.nickname);
+            }
+        }
         socket.to(roomName).emit("welcome");
     });
 

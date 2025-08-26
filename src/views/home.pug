@@ -5,21 +5,45 @@ html(lang="en")
         meta(http-equiv="X-UA-Compatible",content="IE=edge")
         meta(name="viewport",content="width=device-width,initial-scale=1.0")
         title Noom
-        link(rel="stylesheet",href="https://unpkg.com/mvp.css")
+        link(rel="stylesheet", href="/public/css/style.css")
+        link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css")
     body
-        header
-            h1 Noom 
-        main 
         div#welcome
+            h1 Noom
             form
-                input(placeholder = "room name",required,type ="text")
-                button Enter room 
-        div#call
-            div#myStream
-                video#myFace(autoplay,playsinline ,width="400",height="400") 
-                button#mute Mute 
-                button#camera Turn Camera Off
-                select#cameras 
-                video#peerFace(autoplay,playsinline ,width="400",height="400")
+                input#roomName(placeholder="Enter Room Name", required, type="text")
+                input#nickname(placeholder="Enter Nickname", type="text")
+                button Enter Room
+
+        div#call.hidden
+            header
+                h2#roomHeader
+
+            main#videos
+                div.video-container
+                    video#myFace(autoplay, playsinline)
+                    div.nickname#myNickname
+                div.video-container
+                    video#peerFace(autoplay, playsinline)
+                    div.nickname#peerNickname
+
+            footer#controls
+                button#mute
+                    i.fas.fa-microphone
+                button#camera
+                    i.fas.fa-video
+                select#cameras
+                button#startRec
+                    i.fas.fa-record-vinyl
+                button#stopRec
+                    i.fas.fa-stop
+                div#downloadLinks
+                    a#downloadVideo.hidden
+                        i.fas.fa-download
+                        span  Video
+                    a#downloadAudio.hidden
+                        i.fas.fa-download
+                        span  Audio
+
         script(src="/socket.io/socket.io.js")
         script(src="/public/js/app.js")

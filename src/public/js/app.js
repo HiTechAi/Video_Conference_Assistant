@@ -9,6 +9,7 @@ let myStream;
 let muted = false;
 let cameraoff=false;
 let roomName;
+let nickname;
 let myPeerConnection; 
 let myDataChannel;
 
@@ -16,24 +17,35 @@ let myDataChannel;
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
 
-call.hidden = true;
-
 async function initCall(){
-    welcome.hidden = true;
-    call.hidden = false;
+    welcome.classList.add("hidden");
+    call.classList.remove("hidden");
     await getMedia();
     makeConnection();
 }
 
 async function handleWelcomeSubmit(event){
     event.preventDefault();
-    const input = welcomeForm.querySelector("input");
+    const roomNameInput = welcomeForm.querySelector("#roomName");
+    const nicknameInput = welcomeForm.querySelector("#nickname");
+    nickname = nicknameInput.value || "Guest";
+    roomName = roomNameInput.value;
     await initCall();
-    socket.emit("join_room",input.value);
-    roomName = input.value;
-    input.value="";
+    socket.emit("join_room", roomName, nickname);
+    const roomHeader = document.getElementById("roomHeader");
+    roomHeader.innerText = `Room: ${roomName}`;
+    const myNicknameDiv = document.getElementById("myNickname");
+    myNicknameDiv.innerText = nickname;
+    roomNameInput.value="";
+    nicknameInput.value="";
 }
 welcomeForm.addEventListener("submit",handleWelcomeSubmit);
+
+
+socket.on("opponent_nickname", (nick) => {
+    const peerNicknameDiv = document.getElementById("peerNickname");
+    peerNicknameDiv.innerText = nick;
+});
 
 async function getCameras() {
     try {
@@ -78,24 +90,26 @@ async function getMedia(deviceId) {
 
 
 function handleMuteClick(){
-    myStream.getAudioTracks().forEach((track) =>(track.enabled=!track.enabled));
-    if(!muted){
-        muteBtn.innerText = "Un Mute";
-        muted = true;
-    }else{
-        muteBtn.innerText = "Mute";
-        muted = false;
+    myStream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
+    const muteIcon = muteBtn.querySelector("i");
+    if (myStream.getAudioTracks()[0].enabled) {
+        muteIcon.classList.remove("fa-microphone-slash");
+        muteIcon.classList.add("fa-microphone");
+    } else {
+        muteIcon.classList.remove("fa-microphone");
+        muteIcon.classList.add("fa-microphone-slash");
     }
 }
 
 function handleCameraClick(){
-    myStream.getVideoTracks().forEach((track) =>(track.enabled=!track.enabled));
-    if(!cameraoff){
-        cameraBtn.innerText = "Turn Camera On";
-        cameraoff = true;
-    }else{
-        cameraBtn.innerText = "Turn Camera Off";
-        cameraoff = false;
+    myStream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
+    const cameraIcon = cameraBtn.querySelector("i");
+    if (myStream.getVideoTracks()[0].enabled) {
+        cameraIcon.classList.remove("fa-video-slash");
+        cameraIcon.classList.add("fa-video");
+    } else {
+        cameraIcon.classList.remove("fa-video");
+        cameraIcon.classList.add("fa-video-slash");
     }
 }
 
@@ -113,6 +127,100 @@ async function handleCameraChange(){
 muteBtn.addEventListener("click", handleMuteClick);
 cameraBtn.addEventListener("click",handleCameraClick);
 cameraSelect.addEventListener("input",handleCameraChange);
+
+// Recording
+const startRecBtn = document.getElementById("startRec");
+const stopRecBtn = document.getElementById("stopRec");
+const downloadVideoLink = document.getElementById("downloadVideo");
+const downloadAudioLink = document.getElementById("downloadAudio");
+
+let mediaRecorder;
+let mediaAudioRecorder;
+let recordedVideoChunks = [];
+let recordedAudioChunks = [];
+
+function handleStartRecClick() {
+    // Reset download links
+    downloadVideoLink.classList.add("hidden");
+    downloadAudioLink.classList.add("hidden");
+    downloadVideoLink.classList.remove("downloaded");
+    downloadAudioLink.classList.remove("downloaded");
+    downloadVideoLink.querySelector("span").innerText = " Video";
+    downloadAudioLink.querySelector("span").innerText = " Audio";
+
+    startRecBtn.classList.add("recording");
+    recordedVideoChunks = [];
+    recordedAudioChunks = [];
+
+    const videoStream = new MediaStream(myStream.getVideoTracks());
+    const audioStream = new MediaStream(myStream.getAudioTracks());
+
+    mediaRecorder = new MediaRecorder(videoStream, { mimeType: "video/webm" });
+    mediaAudioRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
+
+    mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+            recordedVideoChunks.push(event.data);
+        }
+    };
+
+    mediaAudioRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+            recordedAudioChunks.push(event.data);
+        }
+    };
+
+    mediaRecorder.onstop = () => {
+        const date = new Date();
+        const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+        const videoBlob = new Blob(recordedVideoChunks, { type: "video/webm" });
+        const videoUrl = URL.createObjectURL(videoBlob);
+        downloadVideoLink.href = videoUrl;
+        downloadVideoLink.download = `${fileName}_video.webm`;
+        downloadVideoLink.classList.remove("hidden");
+        console.log("Video recording stopped and file is ready for download.");
+    };
+
+    mediaAudioRecorder.onstop = () => {
+        const date = new Date();
+        const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+        const audioBlob = new Blob(recordedAudioChunks, { type: "audio/webm" });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        downloadAudioLink.href = audioUrl;
+        downloadAudioLink.download = `${fileName}_audio.webm`;
+        downloadAudioLink.classList.remove("hidden");
+        console.log("Audio recording stopped and file is ready for download.");
+    };
+
+    mediaRecorder.start();
+    mediaAudioRecorder.start();
+
+    startRecBtn.disabled = true;
+    stopRecBtn.disabled = false;
+}
+
+function handleStopRecClick() {
+    startRecBtn.classList.remove("recording");
+    mediaRecorder.stop();
+    mediaAudioRecorder.stop();
+
+    startRecBtn.disabled = false;
+    stopRecBtn.disabled = true;
+}
+
+startRecBtn.addEventListener("click", handleStartRecClick);
+stopRecBtn.addEventListener("click", handleStopRecClick);
+
+downloadVideoLink.addEventListener("click", () => {
+    downloadVideoLink.classList.add("downloaded");
+    downloadVideoLink.querySelector("span").innerText = " Downloaded!";
+});
+
+downloadAudioLink.addEventListener("click", () => {
+    downloadAudioLink.classList.add("downloaded");
+    downloadAudioLink.querySelector("span").innerText = " Downloaded!";
+});
+
 
 //Socket code
 

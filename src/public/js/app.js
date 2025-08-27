@@ -139,7 +139,8 @@ let mediaAudioRecorder;
 let recordedVideoChunks = [];
 let recordedAudioChunks = [];
 
-function handleStartRecClick() {
+// 실제 녹화를 수행하는 함수
+function startRecording() {
     // Reset download links
     downloadVideoLink.classList.add("hidden");
     downloadAudioLink.classList.add("hidden");
@@ -190,7 +191,31 @@ function handleStartRecClick() {
         downloadAudioLink.download = `${fileName}_audio.webm`;
         downloadAudioLink.classList.remove("hidden");
         console.log("Audio recording stopped and file is ready for download.");
+
+        // Upload the audio file to the FastAPI server
+        uploadAudio(audioBlob, `${fileName}_audio.webm`);
     };
+
+    async function uploadAudio(blob, fileName) {
+        const formData = new FormData();
+        formData.append("file", blob, fileName);
+
+        try {
+            const response = await fetch("http://127.0.0.1:8000/upload-audio/", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                console.log("File uploaded successfully:", result);
+            } else {
+                console.error("Failed to upload file:", response.statusText);
+            }
+        } catch (error) {
+            console.error("Error uploading file:", error);
+        }
+    }
 
     mediaRecorder.start();
     mediaAudioRecorder.start();
@@ -199,13 +224,28 @@ function handleStartRecClick() {
     stopRecBtn.disabled = false;
 }
 
-function handleStopRecClick() {
+
+function handleStartRecClick() {
+    // 서버로 녹화 시작 이벤트를 보냄
+    socket.emit("start_rec", roomName);
+    // 자신의 녹화도 시작
+    startRecording();
+}
+
+function stopRecording() {
+    if (!startRecBtn.classList.contains("recording")) return;
+
     startRecBtn.classList.remove("recording");
     mediaRecorder.stop();
     mediaAudioRecorder.stop();
 
     startRecBtn.disabled = false;
     stopRecBtn.disabled = true;
+}
+
+function handleStopRecClick() {
+    socket.emit("stop_rec", roomName);
+    stopRecording();
 }
 
 startRecBtn.addEventListener("click", handleStartRecClick);
@@ -279,3 +319,15 @@ function handleAddStream(data){
    const peerFace = document.getElementById("peerFace");
    peerFace.srcObject = data.stream;
 }
+
+// 서버로부터 녹화 시작 이벤트를 받음
+socket.on("rec_started", () => {
+    console.log("Recording started by another user.");
+    startRecording();
+});
+
+// 서버로부터 녹화 정지 이벤트를 받음
+socket.on("rec_stopped", () => {
+    console.log("Recording stopped by another user.");
+    stopRecording();
+});

@@ -101,8 +101,10 @@ main {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex-wrap: wrap; /* Allow items to wrap */
     gap: 20px;
     padding: 20px;
+    overflow-y: auto; /* Add scroll for many participants */
 }
 
 .video-container {
@@ -110,6 +112,8 @@ main {
     flex-direction: column;
     align-items: center;
     gap: 5px;
+    flex: 1 1 400px; /* Grow, Shrink, Basis */
+    max-width: 48%; /* Allow max 2 videos per row, considering gap */
 }
 
 #videos video {

@@ -1,95 +1,106 @@
 const socket = io();
 const myFace = document.getElementById("myFace");
-const muteBtn =document.getElementById("mute");
+const muteBtn = document.getElementById("mute");
 const cameraBtn = document.getElementById("camera");
 const cameraSelect = document.getElementById("cameras");
+const micsSelect = document.getElementById("mics");
 const call = document.getElementById("call");
-
-let myStream;
-let muted = false;
-let cameraoff=false;
-let roomName;
-let nickname;
-let myPeerConnection; 
-let myDataChannel;
-
-//Welcome Form (join a room)
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
+const videosContainer = document.getElementById("videos");
 
-async function initCall(){
-    welcome.classList.add("hidden");
-    call.classList.remove("hidden");
-    await getMedia();
-    makeConnection();
+let myStream;
+let roomName;
+let nickname;
+const peerConnections = {};
+
+// --- UI Functions ---
+function addVideoStream(stream, socketId, peerNickname) {
+    if (document.getElementById(socketId)) {
+        return;
+    }
+    const peerDiv = document.createElement("div");
+    peerDiv.id = socketId;
+    peerDiv.classList.add("video-container");
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.autoplay = true;
+    video.playsInline = true;
+
+    const nicknameDiv = document.createElement("div");
+    nicknameDiv.classList.add("nickname");
+    nicknameDiv.innerText = peerNickname;
+
+    peerDiv.appendChild(video);
+    peerDiv.appendChild(nicknameDiv);
+    videosContainer.appendChild(peerDiv);
 }
 
-async function handleWelcomeSubmit(event){
-    event.preventDefault();
-    const roomNameInput = welcomeForm.querySelector("#roomName");
-    const nicknameInput = welcomeForm.querySelector("#nickname");
-    nickname = nicknameInput.value || "Guest";
-    roomName = roomNameInput.value;
-    await initCall();
-    socket.emit("join_room", roomName, nickname);
-    const roomHeader = document.getElementById("roomHeader");
-    roomHeader.innerText = `Room: ${roomName}`;
-    const myNicknameDiv = document.getElementById("myNickname");
-    myNicknameDiv.innerText = nickname;
-    roomNameInput.value="";
-    nicknameInput.value="";
+function removeVideoStream(socketId) {
+    const peerDiv = document.getElementById(socketId);
+    if (peerDiv) {
+        peerDiv.remove();
+    }
 }
-welcomeForm.addEventListener("submit",handleWelcomeSubmit);
 
+// --- Media Functions ---
+async function getMedia(deviceId, micId) {
+    const initialConstraints = {
+        audio: true,
+        video: { facingMode: "user" },
+    };
+    const specificConstraints = {
+        audio: { deviceId: micId ? { exact: micId } : undefined },
+        video: { deviceId: deviceId ? { exact: deviceId } : undefined },
+    };
+    try {
+        myStream = await navigator.mediaDevices.getUserMedia(
+            deviceId || micId ? specificConstraints : initialConstraints
+        );
+        myFace.srcObject = myStream;
+        if (!deviceId && !micId) {
+            await getDevices();
+        }
+    } catch (e) {
+        console.log(e);
+    }
+}
 
-socket.on("opponent_nickname", (nick) => {
-    const peerNicknameDiv = document.getElementById("peerNickname");
-    peerNicknameDiv.innerText = nick;
-});
-
-async function getCameras() {
+async function getDevices() {
     try {
         const devices = await navigator.mediaDevices.enumerateDevices();
-        const cameras = devices.filter((devices) => devices.kind ==="videoinput");
+        const cameras = devices.filter((device) => device.kind === "videoinput");
+        const mics = devices.filter((device) => device.kind === "audioinput");
+        
         const currentCamera = myStream.getVideoTracks()[0];
-        cameras.forEach((camera) =>{
+        const currentMic = myStream.getAudioTracks()[0];
+
+        cameras.forEach((camera) => {
             const option = document.createElement("option");
             option.value = camera.deviceId;
             option.innerText = camera.label;
-            if(currentCamera.label == camera.label){
+            if (currentCamera && currentCamera.label === camera.label) {
                 option.selected = true;
             }
             cameraSelect.appendChild(option);
         });
-    } catch (error) {
-        console.log(error);
+
+        mics.forEach((mic) => {
+            const option = document.createElement("option");
+            option.value = mic.deviceId;
+            option.innerText = mic.label;
+            if (currentMic && currentMic.label === mic.label) {
+                option.selected = true;
+            }
+            micsSelect.appendChild(option);
+        });
+    } catch (e) {
+        console.log(e);
     }
 }
 
-async function getMedia(deviceId) {
-    const initialConstraints ={
-        audio: true,
-        video: {facingMode:"user"},
-    };
-    const cameraConstraints={
-        audio: true,
-        video: {deviceId:{exact:deviceId}}
-    };
-    try {
-        myStream = await navigator.mediaDevices.getUserMedia(
-            deviceId ? cameraConstraints: initialConstraints
-        );
-       myFace.srcObject = myStream;
-       if(!deviceId){
-       await getCameras();}
-    } catch (error) {
-        console.log(error);
-    }
-}
-
-
-
-function handleMuteClick(){
+function handleMuteClick() {
     myStream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
     const muteIcon = muteBtn.querySelector("i");
     if (myStream.getAudioTracks()[0].enabled) {
@@ -101,7 +112,7 @@ function handleMuteClick(){
     }
 }
 
-function handleCameraClick(){
+function handleCameraClick() {
     myStream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
     const cameraIcon = cameraBtn.querySelector("i");
     if (myStream.getVideoTracks()[0].enabled) {
@@ -113,75 +124,156 @@ function handleCameraClick(){
     }
 }
 
-async function handleCameraChange(){
-    await getMedia(cameraSelect.value);
-    if(myPeerConnection){
-        const VideoTrack = myStream.getVideoTracks()[0];
-        const videoSender = myPeerConnection
-        .getSenders()
-        .find((sender)=> sender.track.kind === "video");
-        videoSender.replaceTrack(VideoTrack);
-    }
+async function handleCameraChange() {
+    await getMedia(cameraSelect.value, micsSelect.value);
+    Object.values(peerConnections).forEach(pc => {
+        const videoTrack = myStream.getVideoTracks()[0];
+        const videoSender = pc.getSenders().find(sender => sender.track.kind === "video");
+        if (videoSender) {
+            videoSender.replaceTrack(videoTrack);
+        }
+    });
 }
 
-muteBtn.addEventListener("click", handleMuteClick);
-cameraBtn.addEventListener("click",handleCameraClick);
-cameraSelect.addEventListener("input",handleCameraChange);
+async function handleMicChange() {
+    await getMedia(cameraSelect.value, micsSelect.value);
+    Object.values(peerConnections).forEach(pc => {
+        const audioTrack = myStream.getAudioTracks()[0];
+        const audioSender = pc.getSenders().find(sender => sender.track.kind === "audio");
+        if (audioSender) {
+            audioSender.replaceTrack(audioTrack);
+        }
+    });
+}
 
-// Recording
+// --- WebRTC Functions ---
+function createPeerConnection(targetSocketId, peerNickname) {
+    const pc = new RTCPeerConnection({
+        iceServers: [
+            {
+                urls: [
+                    "stun:stun1.l.google.com:19302",
+                    "stun:stun2.l.google.com:19302",
+                    "stun:stun3.l.google.com:19302",
+                    "stun:stun4.l.google.com:19302",
+                ],
+            },
+        ],
+    });
+
+    pc.onicecandidate = (event) => {
+        if (event.candidate) {
+            socket.emit("ice", event.candidate, targetSocketId);
+        }
+    };
+
+    pc.ontrack = (event) => {
+        addVideoStream(event.streams[0], targetSocketId, peerNickname);
+    };
+
+    myStream.getTracks().forEach((track) => pc.addTrack(track, myStream));
+
+    peerConnections[targetSocketId] = pc;
+    return pc;
+}
+
+// --- Socket Event Handlers ---
+socket.on("all_users", (users) => {
+    users.forEach(async (user) => {
+        const pc = createPeerConnection(user.id, user.nickname);
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit("offer", offer, user.id, nickname);
+        } catch (err) {
+            console.error(err);
+        }
+    });
+});
+
+socket.on("offer", async (offer, offererId, offererNickname) => {
+    const pc = createPeerConnection(offererId, offererNickname);
+    try {
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit("answer", answer, offererId);
+    } catch (err) {
+        console.error(err);
+    }
+});
+
+socket.on("answer", async (answer, answererId) => {
+    const pc = peerConnections[answererId];
+    if (pc) {
+        await pc.setRemoteDescription(answer);
+    }
+});
+
+socket.on("ice", (ice, senderId) => {
+    const pc = peerConnections[senderId];
+    if (pc) {
+        pc.addIceCandidate(new RTCIceCandidate(ice));
+    }
+});
+
+socket.on("user_disconnected", (socketId) => {
+    const pc = peerConnections[socketId];
+    if (pc) {
+        pc.close();
+        delete peerConnections[socketId];
+    }
+    removeVideoStream(socketId);
+});
+
+// --- Init and Event Listeners ---
+async function initCall() {
+    welcome.classList.add("hidden");
+    call.classList.remove("hidden");
+    await getMedia();
+}
+
+async function handleWelcomeSubmit(event) {
+    event.preventDefault();
+    const roomNameInput = welcomeForm.querySelector("#roomName");
+    const nicknameInput = welcomeForm.querySelector("#nickname");
+    nickname = nicknameInput.value || "Guest";
+    roomName = roomNameInput.value;
+    await initCall();
+    socket.emit("join_room", roomName, nickname);
+    const roomHeader = document.getElementById("roomHeader");
+    roomHeader.innerText = `Room: ${roomName}`;
+    const myNicknameDiv = document.getElementById("myNickname");
+    myNicknameDiv.innerText = nickname;
+    roomNameInput.value = "";
+    nicknameInput.value = "";
+}
+
+welcomeForm.addEventListener("submit", handleWelcomeSubmit);
+muteBtn.addEventListener("click", handleMuteClick);
+cameraBtn.addEventListener("click", handleCameraClick);
+cameraSelect.addEventListener("input", handleCameraChange);
+micsSelect.addEventListener("input", handleMicChange);
+
+// --- Recording Logic ---
 const startRecBtn = document.getElementById("startRec");
 const stopRecBtn = document.getElementById("stopRec");
-const downloadVideoLink = document.getElementById("downloadVideo");
 const downloadAudioLink = document.getElementById("downloadAudio");
 
-let mediaRecorder;
 let mediaAudioRecorder;
-let recordedVideoChunks = [];
 let recordedAudioChunks = [];
 
-// 실제 녹화를 수행하는 함수
 function startRecording() {
-    // Reset download links
-    downloadVideoLink.classList.add("hidden");
     downloadAudioLink.classList.add("hidden");
-    downloadVideoLink.classList.remove("downloaded");
     downloadAudioLink.classList.remove("downloaded");
-    downloadVideoLink.querySelector("span").innerText = " Video";
     downloadAudioLink.querySelector("span").innerText = " Audio";
-
     startRecBtn.classList.add("recording");
-    recordedVideoChunks = [];
     recordedAudioChunks = [];
-
-    const videoStream = new MediaStream(myStream.getVideoTracks());
     const audioStream = new MediaStream(myStream.getAudioTracks());
-
-    mediaRecorder = new MediaRecorder(videoStream, { mimeType: "video/webm" });
     mediaAudioRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
-
-    mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            recordedVideoChunks.push(event.data);
-        }
-    };
-
     mediaAudioRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            recordedAudioChunks.push(event.data);
-        }
+        if (event.data.size > 0) recordedAudioChunks.push(event.data);
     };
-
-    mediaRecorder.onstop = () => {
-        const date = new Date();
-        const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
-        const videoBlob = new Blob(recordedVideoChunks, { type: "video/webm" });
-        const videoUrl = URL.createObjectURL(videoBlob);
-        downloadVideoLink.href = videoUrl;
-        downloadVideoLink.download = `${fileName}_video.webm`;
-        downloadVideoLink.classList.remove("hidden");
-        console.log("Video recording stopped and file is ready for download.");
-    };
-
     mediaAudioRecorder.onstop = () => {
         const date = new Date();
         const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
@@ -191,54 +283,54 @@ function startRecording() {
         downloadAudioLink.download = `${fileName}_audio.webm`;
         downloadAudioLink.classList.remove("hidden");
         console.log("Audio recording stopped and file is ready for download.");
-
-        // Upload the audio file to the FastAPI server
         uploadAudio(audioBlob, `${fileName}_audio.webm`);
     };
-
-    async function uploadAudio(blob, fileName) {
-        const formData = new FormData();
-        formData.append("file", blob, fileName);
-
-        try {
-            const response = await fetch("http://127.0.0.1:8000/upload-audio/", {
-                method: "POST",
-                body: formData,
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                console.log("File uploaded successfully:", result);
-            } else {
-                console.error("Failed to upload file:", response.statusText);
-            }
-        } catch (error) {
-            console.error("Error uploading file:", error);
-        }
-    }
-
-    mediaRecorder.start();
     mediaAudioRecorder.start();
-
     startRecBtn.disabled = true;
     stopRecBtn.disabled = false;
 }
 
+async function uploadAudio(blob, fileName) {
+    const formData = new FormData();
+    formData.append("file", blob, fileName);
+    try {
+        const response = await fetch("http://172.31.57.147:8001/process_video/", {
+            method: "POST",
+            body: formData,
+        });
+        if (!response.ok) {
+            console.error("Failed to upload file:", response.statusText);
+            return;
+        }
+        const result = await response.json();
+        console.log("File uploaded successfully:", result);
+        const rSummaryRes = await fetch("http://172.31.57.143:8010/process_llm", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: result.transcription }),
+        });
+        if (!rSummaryRes.ok) {
+            console.error("Failed to get summary:", rSummaryRes.statusText);
+            return;
+        }
+        const rSummary = await rSummaryRes.json();
+        console.log("--- LLM 서버 응답 (rSummary) ---");
+        console.log(rSummary);
+        console.log("---------------------------------");
+    } catch (error) {
+        console.error("Error uploading file:", error);
+    }
+}
 
 function handleStartRecClick() {
-    // 서버로 녹화 시작 이벤트를 보냄
     socket.emit("start_rec", roomName);
-    // 자신의 녹화도 시작
     startRecording();
 }
 
 function stopRecording() {
     if (!startRecBtn.classList.contains("recording")) return;
-
     startRecBtn.classList.remove("recording");
-    mediaRecorder.stop();
     mediaAudioRecorder.stop();
-
     startRecBtn.disabled = false;
     stopRecBtn.disabled = true;
 }
@@ -251,83 +343,3 @@ function handleStopRecClick() {
 startRecBtn.addEventListener("click", handleStartRecClick);
 stopRecBtn.addEventListener("click", handleStopRecClick);
 
-downloadVideoLink.addEventListener("click", () => {
-    downloadVideoLink.classList.add("downloaded");
-    downloadVideoLink.querySelector("span").innerText = " Downloaded!";
-});
-
-downloadAudioLink.addEventListener("click", () => {
-    downloadAudioLink.classList.add("downloaded");
-    downloadAudioLink.querySelector("span").innerText = " Downloaded!";
-});
-
-
-//Socket code
-
-socket.on("welcome", async () => {
-    const offer = await myPeerConnection.createOffer();
-    myPeerConnection.setLocalDescription(offer);
-    console.log("sent the offer");
-    socket.emit("offer",offer, roomName);
-});
-
-socket.on("offer",async(offer)=>{
-    myPeerConnection.setRemoteDescription(offer);
-    const answer = await myPeerConnection.createAnswer();
-   
-    myPeerConnection.setLocalDescription(answer);
-    socket.emit("answer",answer,roomName);
-})
-
-socket.on("answer",answer=>{
-    myPeerConnection.setRemoteDescription(answer);
-});
-
-socket.on("ice",ice=>{
-    console.log("received candidate");
-    myPeerConnection.addIceCandidate(ice);
-});
-
-function makeConnection(){
-    myPeerConnection = new RTCPeerConnection(
-        {
-    iceServers:[
-        {
-            urls:[
-                "stun:stun1.l.google.com:19302",
-                "stun:stun2.l.google.com:19302",
-                "stun:stun3.l.google.com:19302",
-                "stun:stun4.l.google.com:19302",
-                "stun:stun.l.google.com:19302",
-            ]
-        }
-    ]
-}
-    );
-    myPeerConnection.addEventListener("icecandidate",handleIce);
-    myPeerConnection.addEventListener("addstream",handleAddStream);
-    myStream.getTracks()
-   .forEach(track=>myPeerConnection.addTrack(track,myStream));
-}
-
-function handleIce(data){
-    console.log("sent candidate");
-    socket.emit("ice", data.candidate,roomName);
-}
-
-function handleAddStream(data){
-   const peerFace = document.getElementById("peerFace");
-   peerFace.srcObject = data.stream;
-}
-
-// 서버로부터 녹화 시작 이벤트를 받음
-socket.on("rec_started", () => {
-    console.log("Recording started by another user.");
-    startRecording();
-});
-
-// 서버로부터 녹화 정지 이벤트를 받음
-socket.on("rec_stopped", () => {
-    console.log("Recording stopped by another user.");
-    stopRecording();
-});

@@ -21,15 +21,13 @@ html(lang="en")
 
             main#videos
                 div.video-container
-                    video#myFace(autoplay, playsinline)
+                    video#myFace(autoplay, playsinline, muted)
                     div.nickname#myNickname
-                div.video-container
-                    video#peerFace(autoplay, playsinline)
-                    div.nickname#peerNickname
 
             footer#controls
                 button#mute
                     i.fas.fa-microphone
+                select#mics
                 button#camera
                     i.fas.fa-video
                 select#cameras
@@ -38,9 +36,6 @@ html(lang="en")
                 button#stopRec
                     i.fas.fa-stop
                 div#downloadLinks
-                    a#downloadVideo.hidden
-                        i.fas.fa-download
-                        span  Video
                     a#downloadAudio.hidden
                         i.fas.fa-download
                         span  Audio

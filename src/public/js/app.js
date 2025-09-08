@@ -294,7 +294,7 @@ async function uploadAudio(blob, fileName) {
     const formData = new FormData();
     formData.append("file", blob, fileName);
     try {
-        const response = await fetch("http://172.31.57.147:8001/process_video/", {
+        const response = await fetch("https://172.31.57.147:8001/process_video", {
             method: "POST",
             body: formData,
         });
@@ -304,7 +304,7 @@ async function uploadAudio(blob, fileName) {
         }
         const result = await response.json();
         console.log("File uploaded successfully:", result);
-        const rSummaryRes = await fetch("http://172.31.57.143:8010/process_llm", {
+        const rSummaryRes = await fetch("https://172.31.57.143:8010/process_llm", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: result.transcription }),
@@ -342,4 +342,3 @@ function handleStopRecClick() {
 
 startRecBtn.addEventListener("click", handleStartRecClick);
 stopRecBtn.addEventListener("click", handleStopRecClick);
-

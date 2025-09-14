@@ -1,0 +1,21 @@
+doctype html
+html(lang="en")
+    head
+        meta(charset="UTF-8")
+        meta(http-equiv="X-UA-Compatible", content="IE=edge")
+        meta(name="viewport", content="width=device-width, initial-scale=1.0")
+        title Login - Noom
+        link(rel="stylesheet", href="/public/css/style.css")
+    body
+        div.form-container
+            h1 Login
+            form#loginForm
+                div
+                    label(for="id") ID
+                    input#id(type="text", required)
+                div
+                    label(for="pw") Password
+                    input#pw(type="password", required)
+                button(type="submit") Login
+            a(href="/register") Don't have an account? Register
+        script(src="/public/js/login.js")

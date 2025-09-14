@@ -7,27 +7,30 @@ import path from 'path';
 const app = express();
 
 // --- Multer Setup ---
-// Configure storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'audio_uploads/');
     },
     filename: (req, file, cb) => {
-        // Create a unique filename to avoid overwrites
         const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E9);
         cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
-
 const upload = multer({ storage: storage });
-// --- End Multer Setup ---
 
 app.set("view engine", "pug");
 app.set("views", __dirname + "/views");
 app.use("/public", express.static(__dirname + "/public"));
-app.get("/", (req, res) => res.render("home"));
 
-// --- New Upload Route ---
+// Correct Routes
+app.get("/login", (req, res) => res.render("login"));
+app.get("/register", (req, res) => res.render("register"));
+app.get("/", (req, res) => res.render("login"));
+app.get("/home", (req, res) => res.render("home"));
+app.get("/mypage", (req, res) => res.render("mypage"));
+app.get("/dashboard", (req, res) => res.render("dashboard"));
+
+// Upload Route
 app.post("/upload", upload.single('audio'), (req, res) => {
     const email = req.body.email;
     const file = req.file;
@@ -39,8 +42,6 @@ app.post("/upload", upload.single('audio'), (req, res) => {
     console.log(`Received upload for email: ${email}`);
     console.log(`File saved to: ${file.path}`);
 
-    // Here you would typically trigger the LLM processing with the file and email
-    // For now, just confirm the upload
     res.json({ 
         success: true, 
         message: "Upload successful", 
@@ -48,8 +49,6 @@ app.post("/upload", upload.single('audio'), (req, res) => {
         filePath: file.path 
     });
 });
-// --- End New Upload Route ---
-
 
 const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
@@ -75,6 +74,8 @@ wsServer.on("connection", (socket) => {
             });
         }
         socket.emit("all_users", otherUsers);
+
+        socket.to(roomName).emit("user_joined", { id: socket.id, nickname: socket.nickname });
     });
 
     socket.on("offer", (offer, targetSocketId, nickname) => {
@@ -95,15 +96,14 @@ wsServer.on("connection", (socket) => {
         );
     });
 
-    socket.on("start_rec", (roomName) => {
-        socket.broadcast.to(roomName).emit("rec_started");
+    socket.on("start_rec_sync", (roomName) => {
+        wsServer.to(roomName).emit("rec_started_sync");
     });
 
-    socket.on("stop_rec", (roomName) => {
-        socket.broadcast.to(roomName).emit("rec_stopped");
+    socket.on("stop_rec_sync", (roomName) => {
+        wsServer.to(roomName).emit("rec_stopped_sync");
     });
 });
 
 const handleListen = () => console.log("Listening on http://localhost:3000");
-
 httpServer.listen(3000, "0.0.0.0", handleListen);

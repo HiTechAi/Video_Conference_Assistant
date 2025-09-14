@@ -1,0 +1,16 @@
+doctype html
+html(lang="en")
+    head
+        meta(charset="UTF-8")
+        meta(name="viewport", content="width=device-width, initial-scale=1.0")
+        title Meeting Dashboard
+        link(rel="stylesheet", href="/public/css/style.css")
+    body
+        div.form-container.dashboard-container
+            h1 회의 기록
+            div#reports-container
+                pLoading reports...
+            div.button-container
+                a.secondary-button(href="/home") Back to Home
+
+        script(src="/public/js/dashboard.js")

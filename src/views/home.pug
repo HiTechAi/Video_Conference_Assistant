@@ -1,4 +1,4 @@
-doctype html 
+doctype html
 html(lang="en")
     head
         meta(charset="UTF-8")
@@ -8,37 +8,54 @@ html(lang="en")
         link(rel="stylesheet", href="/public/css/style.css")
         link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css")
     body
-        div#welcome
+        div#welcome.form-container
             h1 Noom
             form
-                input#roomName(placeholder="Enter Room Name", required, type="text")
-                input#nickname(placeholder="Enter Nickname", type="text")
-                button Enter Room
+                div
+                    label(for="roomName") Room Name
+                    input#roomName(required, type="text")
+                button(type="submit") Enter Room
+            div.sub-text
+                a#mypageLink(href="/mypage") My Page
+                span  | 
+                a(href="/dashboard") 회의 기록 보기
+                span  | 
+                a#logoutBtn(href="#") Logout
 
         div#call.hidden
-            header
-                h2#roomHeader
-
-            main#videos
-                div.video-container
-                    video#myFace(autoplay, playsinline, muted)
-                    div.nickname#myNickname
-
+            div.main-container
+                div.sidebar
+                    header
+                        h2#roomHeader
+                    div#users
+                        h3 Participants
+                        ul#userList
+                div.main-content
+                    main#videos
+                        div.video-container#myVideo
+                            video#myFace(autoplay, playsinline, muted)
+                            div.nickname#myNickname
             footer#controls
-                button#mute
-                    i.fas.fa-microphone
-                select#mics
-                button#camera
-                    i.fas.fa-video
-                select#cameras
-                button#startRec
-                    i.fas.fa-record-vinyl
-                button#stopRec
-                    i.fas.fa-stop
+                div.control-group
+                    button#mute
+                        i.fas.fa-microphone
+                    select#mics
+                div.control-group
+                    button#camera
+                        i.fas.fa-video
+                    select#cameras
+                div.control-group
+                    button#startRec
+                        i.fas.fa-record-vinyl
+                    button#stopRec
+                        i.fas.fa-stop
                 div#downloadLinks
                     a#downloadAudio.hidden
                         i.fas.fa-download
                         span  Audio
+                button#exitBtn.control-button.danger
+                    i.fas.fa-phone-slash
+                    span Exit
 
         script(src="/socket.io/socket.io.js")
         script(src="/public/js/app.js")

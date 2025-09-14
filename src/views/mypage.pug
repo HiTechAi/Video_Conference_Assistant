@@ -1,0 +1,32 @@
+doctype html
+html(lang="en")
+    head
+        meta(charset="UTF-8")
+        meta(http-equiv="X-UA-Compatible", content="IE=edge")
+        meta(name="viewport", content="width=device-width, initial-scale=1.0")
+        title My Page - Noom
+        link(rel="stylesheet", href="/public/css/style.css")
+    body
+        div.form-container
+            h1 My Page
+            form#mypageForm
+                div
+                    label(for="name") Name
+                    input#name(type="text", name="name")
+                div
+                    label(for="email") Email
+                    input#email(type="email", name="email", readonly)
+                div
+                    label(for="old_password") Old Password
+                    input#old_password(type="password", name="old_password")
+                div
+                    label(for="password") New Password
+                    input#password(type="password", name="password")
+                div
+                    label(for="confirmPassword") Confirm New Password
+                    input#confirmPassword(type="password", name="confirmPassword")
+                button(type="submit") 저장
+            <div class="button-container">
+                <a href="javascript:history.back()" class="secondary-button">취소</a>
+            </div>
+        script(src="/public/js/mypage.js")

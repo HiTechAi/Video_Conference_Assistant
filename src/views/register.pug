@@ -1,0 +1,24 @@
+doctype html
+html(lang="en")
+    head
+        meta(charset="UTF-8")
+        meta(http-equiv="X-UA-Compatible", content="IE=edge")
+        meta(name="viewport", content="width=device-width, initial-scale=1.0")
+        title Register - Noom
+        link(rel="stylesheet", href="/public/css/style.css")
+    body
+        div.form-container
+            h1 Register
+            form#registerForm
+                div
+                    label(for="name") Name
+                    input#name(type="text", required)
+                div
+                    label(for="id") ID
+                    input#id(type="text", required)
+                div
+                    label(for="pw") Password
+                    input#pw(type="password", required)
+                button(type="submit") Register
+            a(href="/login") Already have an account? Login
+        script(src="/public/js/register.js")

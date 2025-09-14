@@ -1,18 +1,80 @@
 const socket = io();
 const myFace = document.getElementById("myFace");
 const muteBtn = document.getElementById("mute");
+const muteBtn = document.getElementById("mute");
 const cameraBtn = document.getElementById("camera");
 const cameraSelect = document.getElementById("cameras");
+const micsSelect = document.getElementById("mics");
 const micsSelect = document.getElementById("mics");
 const call = document.getElementById("call");
 const welcome = document.getElementById("welcome");
 const welcomeForm = welcome.querySelector("form");
 const videosContainer = document.getElementById("videos");
+const exitBtn = document.getElementById("exitBtn");
 
 let myStream;
 let roomName;
 let nickname;
 const peerConnections = {};
+let participants = {};
+const userList = document.getElementById("userList");
+
+function updateUserListDOM() {
+    if (!userList) return;
+    userList.innerHTML = ""; // Clear list
+    for (const [id, participant] of Object.entries(participants)) {
+        const li = document.createElement("li");
+        const icon = document.createElement("i");
+        icon.className = "fas fa-circle";
+        li.appendChild(icon);
+        li.appendChild(document.createTextNode(participant.nickname));
+        if (id === socket.id) {
+            li.appendChild(document.createTextNode(" (You)"));
+        }
+        userList.appendChild(li);
+    }
+    updateVideoGrid(); // Update video grid layout
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+        window.location.href = '/login';
+        return;
+    }
+
+    try {
+        const response = await fetch('https://172.31.57.147:8001/members/me', {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        const userData = await response.json();
+        nickname = userData.name; // 전역 변수에 닉네임 저장
+        const myNicknameDiv = document.getElementById("myNickname");
+        if(myNicknameDiv) myNicknameDiv.innerText = nickname;
+
+        // Add self to participants list
+        participants[socket.id] = { nickname };
+
+    } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        // 오류 발생 시 로그인 페이지로 보낼 수도 있습니다.
+        window.location.href = '/login';
+    }
+
+    welcomeForm.addEventListener("submit", handleWelcomeSubmit);
+
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            localStorage.removeItem('token');
+            sessionStorage.removeItem('nickname');
+            window.location.href = '/login';
+        });
+    }
+});
 
 // --- UI Functions ---
 function addVideoStream(stream, socketId, peerNickname) {
@@ -44,6 +106,32 @@ function removeVideoStream(socketId) {
     }
 }
 
+function updateVideoGrid() {
+    const numParticipants = Object.keys(participants).length;
+    if (numParticipants === 0) return;
+
+    // Calculate the best grid layout
+    const container = document.getElementById("videos");
+    let cols = Math.ceil(Math.sqrt(numParticipants));
+    let rows = Math.ceil(numParticipants / cols);
+
+    // For certain numbers, a different layout is better.
+    // E.g., for 3, a 3x1 is better than 2x2. For 6, 3x2 is better than 3x3.
+    if (numParticipants === 3) {
+        cols = 3;
+        rows = 1;
+    } else if (numParticipants === 5 || numParticipants === 6) {
+        cols = 3;
+        rows = 2;
+    } else if (numParticipants === 7 || numParticipants === 8) {
+        cols = 4;
+        rows = 2;
+    }
+
+    container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+    container.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+}
+
 // --- Media Functions ---
 async function getMedia(deviceId, micId) {
     const initialConstraints = {
@@ -73,23 +161,26 @@ async function getDevices() {
         const cameras = devices.filter((device) => device.kind === "videoinput");
         const mics = devices.filter((device) => device.kind === "audioinput");
         
+        const cameras = devices.filter((device) => device.kind === "videoinput");
+        const mics = devices.filter((device) => device.kind === "audioinput");
+        
         const currentCamera = myStream.getVideoTracks()[0];
         const currentMic = myStream.getAudioTracks()[0];
 
-        cameras.forEach((camera) => {
+        cameras.forEach((camera, index) => {
             const option = document.createElement("option");
             option.value = camera.deviceId;
-            option.innerText = camera.label;
+            option.innerText = camera.label || `Camera ${index + 1}`;
             if (currentCamera && currentCamera.label === camera.label) {
                 option.selected = true;
             }
             cameraSelect.appendChild(option);
         });
 
-        mics.forEach((mic) => {
+        mics.forEach((mic, index) => {
             const option = document.createElement("option");
             option.value = mic.deviceId;
-            option.innerText = mic.label;
+            option.innerText = mic.label || `Microphone ${index + 1}`;
             if (currentMic && currentMic.label === mic.label) {
                 option.selected = true;
             }
@@ -100,6 +191,7 @@ async function getDevices() {
     }
 }
 
+function handleMuteClick() {
 function handleMuteClick() {
     myStream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
     const muteIcon = muteBtn.querySelector("i");
@@ -112,6 +204,7 @@ function handleMuteClick() {
     }
 }
 
+function handleCameraClick() {
 function handleCameraClick() {
     myStream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
     const cameraIcon = cameraBtn.querySelector("i");
@@ -179,6 +272,13 @@ function createPeerConnection(targetSocketId, peerNickname) {
 
 // --- Socket Event Handlers ---
 socket.on("all_users", (users) => {
+    // Add other users to our participants list
+    users.forEach(user => {
+        participants[user.id] = { nickname: user.nickname };
+    });
+    updateUserListDOM();
+
+    // Create peer connections for all other users
     users.forEach(async (user) => {
         const pc = createPeerConnection(user.id, user.nickname);
         try {
@@ -189,6 +289,11 @@ socket.on("all_users", (users) => {
             console.error(err);
         }
     });
+});
+
+socket.on("user_joined", (user) => {
+    participants[user.id] = { nickname: user.nickname };
+    updateUserListDOM();
 });
 
 socket.on("offer", async (offer, offererId, offererNickname) => {
@@ -218,12 +323,17 @@ socket.on("ice", (ice, senderId) => {
 });
 
 socket.on("user_disconnected", (socketId) => {
+    // Close PeerConnection
     const pc = peerConnections[socketId];
     if (pc) {
         pc.close();
         delete peerConnections[socketId];
     }
+    // Remove video stream from DOM
     removeVideoStream(socketId);
+    // Remove from participants list
+    delete participants[socketId];
+    updateUserListDOM();
 });
 
 // --- Init and Event Listeners ---
@@ -234,19 +344,20 @@ async function initCall() {
 }
 
 async function handleWelcomeSubmit(event) {
+    console.log("Enter Room form submitted");
     event.preventDefault();
-    const roomNameInput = welcomeForm.querySelector("#roomName");
-    const nicknameInput = welcomeForm.querySelector("#nickname");
-    nickname = nicknameInput.value || "Guest";
+    const roomNameInput = document.getElementById("roomName");
     roomName = roomNameInput.value;
-    await initCall();
-    socket.emit("join_room", roomName, nickname);
-    const roomHeader = document.getElementById("roomHeader");
-    roomHeader.innerText = `Room: ${roomName}`;
-    const myNicknameDiv = document.getElementById("myNickname");
-    myNicknameDiv.innerText = nickname;
     roomNameInput.value = "";
-    nicknameInput.value = "";
+    
+    // Set room name in header
+    const roomHeader = document.getElementById("roomHeader");
+    roomHeader.innerText = roomName;
+
+    await initCall(); // Wait for media stream to be ready
+    
+    // Now that myStream is ready, join the room
+    socket.emit("join_room", roomName, nickname);
 }
 
 welcomeForm.addEventListener("submit", handleWelcomeSubmit);
@@ -254,7 +365,11 @@ muteBtn.addEventListener("click", handleMuteClick);
 cameraBtn.addEventListener("click", handleCameraClick);
 cameraSelect.addEventListener("input", handleCameraChange);
 micsSelect.addEventListener("input", handleMicChange);
+cameraBtn.addEventListener("click", handleCameraClick);
+cameraSelect.addEventListener("input", handleCameraChange);
+micsSelect.addEventListener("input", handleMicChange);
 
+// --- Recording Logic ---
 // --- Recording Logic ---
 const startRecBtn = document.getElementById("startRec");
 const stopRecBtn = document.getElementById("stopRec");
@@ -263,28 +378,42 @@ const downloadAudioLink = document.getElementById("downloadAudio");
 let mediaAudioRecorder;
 let recordedAudioChunks = [];
 
+// Listen for server commands to start/stop recording
+socket.on("rec_started_sync", () => {
+    console.log("Received command to start recording.");
+    startRecording();
+});
+
+socket.on("rec_stopped_sync", () => {
+    console.log("Received command to stop recording.");
+    stopRecording();
+});
+
 function startRecording() {
+    if (mediaAudioRecorder && mediaAudioRecorder.state === "recording") return;
+    console.log("Starting local recording...");
+
     downloadAudioLink.classList.add("hidden");
-    downloadAudioLink.classList.remove("downloaded");
-    downloadAudioLink.querySelector("span").innerText = " Audio";
     startRecBtn.classList.add("recording");
     recordedAudioChunks = [];
     const audioStream = new MediaStream(myStream.getAudioTracks());
     mediaAudioRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
     mediaAudioRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedAudioChunks.push(event.data);
+        if (event.data.size > 0) recordedAudioChunks.push(event.data);
     };
     mediaAudioRecorder.onstop = () => {
         const date = new Date();
         const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
         const audioBlob = new Blob(recordedAudioChunks, { type: "audio/webm" });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        downloadAudioLink.href = audioUrl;
-        downloadAudioLink.download = `${fileName}_audio.webm`;
-        downloadAudioLink.classList.remove("hidden");
-        console.log("Audio recording stopped and file is ready for download.");
+        
+        console.log("Audio recording stopped. Uploading file...");
         uploadAudio(audioBlob, `${fileName}_audio.webm`);
     };
+    mediaAudioRecorder.start();
+    startRecBtn.disabled = true;
+    stopRecBtn.disabled = false;
+}
     mediaAudioRecorder.start();
     startRecBtn.disabled = true;
     stopRecBtn.disabled = false;
@@ -293,8 +422,10 @@ function startRecording() {
 async function uploadAudio(blob, fileName) {
     const formData = new FormData();
     formData.append("file", blob, fileName);
+    formData.append("nickname", nickname); // Add nickname to the form data
+
     try {
-        const response = await fetch("https://172.31.57.147:8001/process_video", {
+        const response = await fetch("https://172.31.57.147:8001/whispers/process_video", {
             method: "POST",
             body: formData,
         });
@@ -304,6 +435,8 @@ async function uploadAudio(blob, fileName) {
         }
         const result = await response.json();
         console.log("File uploaded successfully:", result);
+        // The summary logic seems out of place for individual uploads, commenting out for now
+        /*
         const rSummaryRes = await fetch("https://172.31.57.143:8010/process_llm", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -317,28 +450,37 @@ async function uploadAudio(blob, fileName) {
         console.log("--- LLM 서버 응답 (rSummary) ---");
         console.log(rSummary);
         console.log("---------------------------------");
+        */
     } catch (error) {
         console.error("Error uploading file:", error);
     }
 }
 
-function handleStartRecClick() {
-    socket.emit("start_rec", roomName);
-    startRecording();
-}
-
 function stopRecording() {
-    if (!startRecBtn.classList.contains("recording")) return;
+    if (!mediaAudioRecorder || mediaAudioRecorder.state !== "recording") return;
+    console.log("Stopping local recording...");
+
     startRecBtn.classList.remove("recording");
     mediaAudioRecorder.stop();
     startRecBtn.disabled = false;
     stopRecBtn.disabled = true;
 }
 
+// Emit sync events when buttons are clicked
+function handleStartRecClick() {
+    console.log("Start Record button clicked. Emitting to server...");
+    socket.emit("start_rec_sync", roomName);
+}
+
 function handleStopRecClick() {
-    socket.emit("stop_rec", roomName);
-    stopRecording();
+    console.log("Stop Record button clicked. Emitting to server...");
+    socket.emit("stop_rec_sync", roomName);
 }
 
 startRecBtn.addEventListener("click", handleStartRecClick);
 stopRecBtn.addEventListener("click", handleStopRecClick);
+exitBtn.addEventListener("click", () => {
+    window.location.reload();
+});
+
+window.addEventListener("resize", updateVideoGrid);

@@ -1,10 +1,8 @@
 const socket = io();
 const myFace = document.getElementById("myFace");
 const muteBtn = document.getElementById("mute");
-const muteBtn = document.getElementById("mute");
 const cameraBtn = document.getElementById("camera");
 const cameraSelect = document.getElementById("cameras");
-const micsSelect = document.getElementById("mics");
 const micsSelect = document.getElementById("mics");
 const call = document.getElementById("call");
 const welcome = document.getElementById("welcome");
@@ -161,9 +159,6 @@ async function getDevices() {
         const cameras = devices.filter((device) => device.kind === "videoinput");
         const mics = devices.filter((device) => device.kind === "audioinput");
         
-        const cameras = devices.filter((device) => device.kind === "videoinput");
-        const mics = devices.filter((device) => device.kind === "audioinput");
-        
         const currentCamera = myStream.getVideoTracks()[0];
         const currentMic = myStream.getAudioTracks()[0];
 
@@ -192,7 +187,6 @@ async function getDevices() {
 }
 
 function handleMuteClick() {
-function handleMuteClick() {
     myStream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
     const muteIcon = muteBtn.querySelector("i");
     if (myStream.getAudioTracks()[0].enabled) {
@@ -204,7 +198,6 @@ function handleMuteClick() {
     }
 }
 
-function handleCameraClick() {
 function handleCameraClick() {
     myStream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
     const cameraIcon = cameraBtn.querySelector("i");
@@ -336,6 +329,38 @@ socket.on("user_disconnected", (socketId) => {
     updateUserListDOM();
 });
 
+socket.on("start_screen_share", (sharerId) => {
+    const videosContainer = document.getElementById("videos");
+    const sharerVideo = document.getElementById(sharerId);
+    if (sharerVideo) {
+        videosContainer.classList.add("screen-sharing-active");
+        sharerVideo.classList.add("main-video");
+    }
+});
+
+socket.on("stop_screen_share", () => {
+    const videosContainer = document.getElementById("videos");
+    videosContainer.classList.remove("screen-sharing-active");
+    const allVideos = videosContainer.querySelectorAll(".video-container");
+    allVideos.forEach(video => video.classList.remove("main-video"));
+});
+
+socket.on("start_screen_share", (sharerId) => {
+    const videosContainer = document.getElementById("videos");
+    const sharerVideo = document.getElementById(sharerId);
+    if (sharerVideo) {
+        videosContainer.classList.add("screen-sharing-active");
+        sharerVideo.classList.add("main-video");
+    }
+});
+
+socket.on("stop_screen_share", () => {
+    const videosContainer = document.getElementById("videos");
+    videosContainer.classList.remove("screen-sharing-active");
+    const allVideos = videosContainer.querySelectorAll(".video-container");
+    allVideos.forEach(video => video.classList.remove("main-video"));
+});
+
 // --- Init and Event Listeners ---
 async function initCall() {
     welcome.classList.add("hidden");
@@ -344,27 +369,21 @@ async function initCall() {
 }
 
 async function handleWelcomeSubmit(event) {
-    console.log("Enter Room form submitted");
     event.preventDefault();
     const roomNameInput = document.getElementById("roomName");
     roomName = roomNameInput.value;
     roomNameInput.value = "";
     
-    // Set room name in header
     const roomHeader = document.getElementById("roomHeader");
     roomHeader.innerText = roomName;
 
-    await initCall(); // Wait for media stream to be ready
+    await initCall();
     
-    // Now that myStream is ready, join the room
     socket.emit("join_room", roomName, nickname);
 }
 
 welcomeForm.addEventListener("submit", handleWelcomeSubmit);
 muteBtn.addEventListener("click", handleMuteClick);
-cameraBtn.addEventListener("click", handleCameraClick);
-cameraSelect.addEventListener("input", handleCameraChange);
-micsSelect.addEventListener("input", handleMicChange);
 cameraBtn.addEventListener("click", handleCameraClick);
 cameraSelect.addEventListener("input", handleCameraChange);
 micsSelect.addEventListener("input", handleMicChange);
@@ -400,7 +419,6 @@ function startRecording() {
     mediaAudioRecorder = new MediaRecorder(audioStream, { mimeType: "audio/webm" });
     mediaAudioRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedAudioChunks.push(event.data);
-        if (event.data.size > 0) recordedAudioChunks.push(event.data);
     };
     mediaAudioRecorder.onstop = () => {
         const date = new Date();
@@ -410,10 +428,6 @@ function startRecording() {
         console.log("Audio recording stopped. Uploading file...");
         uploadAudio(audioBlob, `${fileName}_audio.webm`);
     };
-    mediaAudioRecorder.start();
-    startRecBtn.disabled = true;
-    stopRecBtn.disabled = false;
-}
     mediaAudioRecorder.start();
     startRecBtn.disabled = true;
     stopRecBtn.disabled = false;
@@ -482,5 +496,64 @@ stopRecBtn.addEventListener("click", handleStopRecClick);
 exitBtn.addEventListener("click", () => {
     window.location.reload();
 });
+
+const shareScreenBtn = document.getElementById("shareScreen");
+
+let isScreenSharing = false;
+let screenStream = null;
+
+async function handleShareScreenClick() {
+    if (isScreenSharing) {
+        stopScreenShare();
+    } else {
+        startScreenShare();
+    }
+}
+
+async function startScreenShare() {
+    try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+        const screenTrack = screenStream.getVideoTracks()[0];
+
+        Object.values(peerConnections).forEach(pc => {
+            const sender = pc.getSenders().find(s => s.track.kind === 'video');
+            sender.replaceTrack(screenTrack);
+        });
+
+        myFace.srcObject = screenStream;
+        isScreenSharing = true;
+        shareScreenBtn.classList.add("sharing");
+
+        screenTrack.onended = () => {
+            stopScreenShare();
+        };
+
+        socket.emit("start_screen_share", roomName, socket.id);
+
+    } catch (e) {
+        console.error("Could not start screen share:", e);
+    }
+}
+
+function stopScreenShare() {
+    const cameraTrack = myStream.getVideoTracks()[0];
+    Object.values(peerConnections).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track.kind === 'video');
+        sender.replaceTrack(cameraTrack);
+    });
+
+    myFace.srcObject = myStream;
+    isScreenSharing = false;
+    shareScreenBtn.classList.remove("sharing");
+    if(screenStream) {
+        screenStream.getTracks().forEach(track => track.stop());
+        screenStream = null;
+    }
+
+    socket.emit("stop_screen_share", roomName);
+}
+
+shareScreenBtn.addEventListener("click", handleShareScreenClick);
+
 
 window.addEventListener("resize", updateVideoGrid);

@@ -380,3 +380,30 @@ a:hover {
     color: var(--gray-light);
     font-weight: 500;
 }
+
+/* Screen Sharing Styles */
+#videos.screen-sharing-active {
+    display: flex;
+    flex-direction: row; /* Side-by-side layout */
+    align-items: flex-start; /* Align items to the top */
+}
+
+#videos.screen-sharing-active .video-container {
+    width: 250px; /* Thumbnail width */
+    height: 150px; /* Thumbnail height */
+    margin-bottom: 10px;
+    margin-right: 10px; /* Space between thumbnails */
+}
+
+#videos.screen-sharing-active .video-container.main-video {
+    width: 100%;
+    height: auto;
+    flex-grow: 1;
+    order: -1; /* Move to the beginning */
+    margin-right: 0;
+}
+
+#controls button#shareScreen.sharing {
+    background-color: var(--green);
+    color: var(--white);
+}

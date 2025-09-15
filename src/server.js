@@ -7,22 +7,24 @@ import path from 'path';
 const app = express();
 
 // --- Multer Setup ---
+// Configure storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, 'audio_uploads/');
     },
     filename: (req, file, cb) => {
+        // Create a unique filename to avoid overwrites
         const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E9);
         cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
+
 const upload = multer({ storage: storage });
+// --- End Multer Setup ---
 
 app.set("view engine", "pug");
 app.set("views", __dirname + "/views");
 app.use("/public", express.static(__dirname + "/public"));
-
-// Correct Routes
 app.get("/login", (req, res) => res.render("login"));
 app.get("/register", (req, res) => res.render("register"));
 app.get("/", (req, res) => res.render("login"));
@@ -30,7 +32,7 @@ app.get("/home", (req, res) => res.render("home"));
 app.get("/mypage", (req, res) => res.render("mypage"));
 app.get("/dashboard", (req, res) => res.render("dashboard"));
 
-// Upload Route
+// --- New Upload Route ---
 app.post("/upload", upload.single('audio'), (req, res) => {
     const email = req.body.email;
     const file = req.file;
@@ -42,6 +44,8 @@ app.post("/upload", upload.single('audio'), (req, res) => {
     console.log(`Received upload for email: ${email}`);
     console.log(`File saved to: ${file.path}`);
 
+    // Here you would typically trigger the LLM processing with the file and email
+    // For now, just confirm the upload
     res.json({ 
         success: true, 
         message: "Upload successful", 
@@ -49,6 +53,8 @@ app.post("/upload", upload.single('audio'), (req, res) => {
         filePath: file.path 
     });
 });
+// --- End New Upload Route ---
+
 
 const httpServer = http.createServer(app);
 const wsServer = SocketIO(httpServer);
@@ -57,6 +63,7 @@ wsServer.on("connection", (socket) => {
     socket.on("join_room", (roomName, nickname) => {
         socket.join(roomName);
         socket["nickname"] = nickname;
+
 
         const otherUsers = [];
         const clientsInRoom = wsServer.sockets.adapter.rooms.get(roomName);
@@ -75,6 +82,7 @@ wsServer.on("connection", (socket) => {
         }
         socket.emit("all_users", otherUsers);
 
+        // Notify others in the room that a new user has joined
         socket.to(roomName).emit("user_joined", { id: socket.id, nickname: socket.nickname });
     });
 
@@ -96,14 +104,31 @@ wsServer.on("connection", (socket) => {
         );
     });
 
-    socket.on("start_rec_sync", (roomName) => {
-        wsServer.to(roomName).emit("rec_started_sync");
-    });
+    // Events to broadcast to the entire room (including sender)
+    const broadcastEvents = {
+        "start_rec_sync": "rec_started_sync",
+        "stop_rec_sync": "rec_stopped_sync",
+    };
 
-    socket.on("stop_rec_sync", (roomName) => {
-        wsServer.to(roomName).emit("rec_stopped_sync");
-    });
+    for (const [event, targetEvent] of Object.entries(broadcastEvents)) {
+        socket.on(event, (roomName, ...args) => {
+            wsServer.to(roomName).emit(targetEvent, ...args);
+        });
+    }
+
+    // Events to relay to other users in the room
+    const relayEvents = [
+        "start_screen_share",
+        "stop_screen_share"
+    ];
+
+    for (const event of relayEvents) {
+        socket.on(event, (roomName, ...args) => {
+            socket.to(roomName).emit(event, ...args);
+        });
+    }
 });
 
 const handleListen = () => console.log("Listening on http://localhost:3000");
+
 httpServer.listen(3000, "0.0.0.0", handleListen);

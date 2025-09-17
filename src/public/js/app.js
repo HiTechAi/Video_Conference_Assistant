@@ -421,12 +421,14 @@ function startRecording() {
         if (event.data.size > 0) recordedAudioChunks.push(event.data);
     };
     mediaAudioRecorder.onstop = () => {
-        const date = new Date();
-        const fileName = `${nickname}_${roomName}_${(date.getMonth()+1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}_${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+        const fileName = `${nickname}_${roomName}.webm`;
+        
+        console.log(`명명규칙에 따라 생성된 파일 이름: ${fileName}`);
+
         const audioBlob = new Blob(recordedAudioChunks, { type: "audio/webm" });
         
         console.log("Audio recording stopped. Uploading file...");
-        uploadAudio(audioBlob, `${fileName}_audio.webm`);
+        uploadAudio(audioBlob, fileName);
     };
     mediaAudioRecorder.start();
     startRecBtn.disabled = true;
@@ -436,10 +438,11 @@ function startRecording() {
 async function uploadAudio(blob, fileName) {
     const formData = new FormData();
     formData.append("file", blob, fileName);
-    formData.append("nickname", nickname); // Add nickname to the form data
+    formData.append("nickname", nickname);
+    formData.append("roomName", roomName);
 
     try {
-        const response = await fetch("https://172.31.57.147:8001/whispers/process_video", {
+        const response = await fetch("https://172.31.57.147:8001/whispers/upload_video", {
             method: "POST",
             body: formData,
         });
@@ -496,6 +499,52 @@ stopRecBtn.addEventListener("click", handleStopRecClick);
 exitBtn.addEventListener("click", () => {
     window.location.reload();
 });
+
+const reportBtn = document.getElementById("reportBtn");
+if(reportBtn) {
+    reportBtn.addEventListener("click", handleReportClick);
+}
+
+async function handleReportClick() {
+    console.log("Report button clicked.");
+
+    const currentTime = new Date().toISOString().slice(0,10);
+
+    const reportData = {
+        directory_name: roomName,
+        timestamp: currentTime,
+    };
+
+    console.log("Sending report data:", reportData);
+    alert(`전송될 데이터:\n디렉토리 이름: ${reportData.directory_name}\n시간: ${reportData.timestamp}`);
+
+    try {
+        // 중요: 이 엔드포인트(/reports/create)는 백엔드에 새로 만들어야 합니다.
+        const response = await fetch("https://172.31.57.147:8001/whispers/button", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem('token')}` // 인증 토큰 추가
+            },
+            body: JSON.stringify(reportData),
+        });
+
+        if (!response.ok) {
+            const errorResult = await response.json().catch(() => ({ message: response.statusText }));
+            console.error("Failed to submit report:", errorResult.message);
+            alert(`리포트 전송 실패: ${errorResult.message}`);
+            return;
+        }
+
+        const result = await response.json();
+        console.log("Report submitted successfully:", result);
+        alert("리포트가 성공적으로 전송되었습니다!");
+
+    } catch (error) {
+        console.error("Error submitting report:", error);
+        alert("리포트 전송 중 오류가 발생했습니다.");
+    }
+}
 
 const shareScreenBtn = document.getElementById("shareScreen");
 
@@ -557,3 +606,4 @@ shareScreenBtn.addEventListener("click", handleShareScreenClick);
 
 
 window.addEventListener("resize", updateVideoGrid);
+

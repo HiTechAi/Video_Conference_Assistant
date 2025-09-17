@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const pw = document.getElementById('pw').value;
 
         try {
-            const response = await fetch('https://172.31.57.147:8001/members/', {
+            const response = await fetch('https://172.31.57.147:8001/members/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

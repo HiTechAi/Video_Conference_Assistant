@@ -74,4 +74,4 @@
 
 
 ## 백엔드 🛠️
-[백엔드 보러가기](https://github.com/HiTechAi/Video_Conference_Assistant/blob/main/backend/README.md)
+[백엔드 보러가기](https://github.com/HiTechAi/Video_Conference_Assistant/blob/main/backends/README.md)

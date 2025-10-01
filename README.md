@@ -73,3 +73,5 @@
 ## 회의내용 요약정리
 
 
+## 백엔드 🛠️
+[백엔드 보러가기](https://github.com/HiTechAi/Video_Conference_Assistant/backend/README.md)
